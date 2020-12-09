@@ -1,4 +1,8 @@
 program mybase64
+    ! use, intrinsic :: iso_fortran_env, only : stdin=>input_unit, &
+    !                                       stdout=>output_unit, &
+    !                                       stderr=>error_unit
+
     implicit none
 
     integer, parameter :: BLOCKSIZE = 3072
@@ -8,7 +12,7 @@ program mybase64
     logical :: decode = .false.
     logical :: ignore_garbage = .false.
     integer :: wrap_column = 76
-    character(len=1024) :: infile = "stdin"
+    character(len=1024) :: infile = "test.txt"
 
     integer :: argn = 1
     character(len=32) :: optc = ""
@@ -36,7 +40,7 @@ program mybase64
     ! if (decode) then
     !     do_decode()
     ! else
-        call do_encode(infile, "stdout", ignore_garbage)
+        call do_encode(infile, "stdout", wrap_column)
     ! end if
 
     contains
@@ -47,7 +51,9 @@ program mybase64
         integer :: n, n0, n1, n2, n3
         integer :: padCount
 
-        integer :: i, outputIndex=1
+        integer :: i, outputIndex
+
+        outputIndex=1
         do i = 1, insize, 3
             n = ishft( ichar( inbuf(i:i)), 16 ) 
             n = n + ishft( ichar( inbuf(i+1:i+1)), 8 ) 
@@ -82,35 +88,66 @@ program mybase64
 
     end subroutine base64_encode
 
-    subroutine do_encode(in, out, ignore_garbage)
+    subroutine do_encode(in, out, wrap_column)
         character(*), intent(in) :: in, out
-        logical :: ignore_garbage
+        integer, intent(in) :: wrap_column
 
-        integer :: current_column = 0
+        integer :: current_column
         character(len=BLOCKSIZE) :: inbuf
         character(len=B64BLOCKSIZE) :: outbuf
-        integer :: sum=BLOCKSIZE, io
-        logical :: is_eof = .false.
+        integer :: sum, io
+        logical :: is_eof
+
+        character :: tmp
+
+        sum=BLOCKSIZE
+        current_column = 1
+        is_eof = .false.
 
         open(1, file=in, status='old')
 
         do while (sum == BLOCKSIZE .and. (.not. is_eof))
+            ! print *, "Iniciando bloco"
             sum = 0
             do while (sum < BLOCKSIZE)
-                read(1,*, IOSTAT=io) inbuf(sum+1:sum+1)
+                call fgetc(1, tmp, io)
+                ! print *, tmp, io
                 if (io < 0) then
                     is_eof = .true.
+                    exit
                 else if (io > 0) then
                     ! error de leitura (parece que o base64 nao se encomoda)
                 end if
+                inbuf(sum+1:sum+1) = tmp
+                sum = sum+1
             end do
+
+            ! print *, inbuf(1:sum)
 
             if(sum > 0) then
                 call base64_encode(inbuf, sum, outbuf, base64lenght(sum))
+                call wrap_write(outbuf, base64lenght(sum), wrap_column, current_column)
             end if
         end do
 
     end subroutine do_encode
+
+    subroutine wrap_write(outbuf, outsize, wrap_column, current_column)
+        character (*), intent(in) :: outbuf
+        integer, intent(in) :: outsize, wrap_column
+        integer, intent(inout) :: current_column
+        integer :: i
+        do i=1, outsize
+            if(current_column > wrap_column) then
+                ! call fput('\n')
+                print '(A)'
+                current_column = 1
+            end if
+            ! write(*,*) outbuf(i:i)
+            call fput(outbuf(i:i))
+            current_column = current_column + 1
+        end do
+    end subroutine
 
     function base64lenght(x)
         integer :: x, base64lenght

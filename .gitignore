@@ -1,2 +1,4 @@
 *.o
 mybase64
+
+*.txt
