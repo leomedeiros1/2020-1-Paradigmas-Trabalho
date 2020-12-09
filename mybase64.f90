@@ -5,6 +5,9 @@ program mybase64
 
     implicit none
 
+    integer, parameter :: EXIT_FAILURE = 1
+    integer, parameter :: EXIT_SUCCESS = 0
+
     integer, parameter :: BLOCKSIZE = 3072
     integer, parameter :: B64BLOCKSIZE  = BLOCKSIZE / 3 * 4 
     character(*), parameter :: base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -15,6 +18,7 @@ program mybase64
     character(len=1024) :: infile = "test.txt"
 
     integer :: argn = 1
+    integer :: io_stat
     character(len=32) :: optc = ""
 
     if (mod(BLOCKSIZE, 12) /= 0) then
@@ -22,26 +26,42 @@ program mybase64
         call exit()
     end if
 
+    do
+        call get_command_argument(argn, optc)
+        if (len_trim(optc) == 0) exit
+        argn = argn + 1
 
-    ! character(len=BLOCKSIZE) :: in = "Man is distinguished"
-    ! character(len=B64BLOCKSIZE) :: out
+        select case (optc)
+            case ("--help")
+                call usage(EXIT_SUCCESS)
+            case ("--version")
+                print "(a4)", "8.30"
+            case ("-i", "--ignore-garbage")
+                ignore_garbage = .true.
+            case ("-d", "--decode")
+                decode = .true.
+            case ("-w")
+                !
+            case default
+                if (optc(1:7) == "--wrap=") then
+                    read (optc(8:), *, IOSTAT=io_stat) wrap_column
+                    if (io_stat /= 0) then
+                        ! TODO fix optc(8:) lenght
+                        print "(A)", "base64: invalid wrap size: ‘"//optc(8:)//"’"
+                        call exit(1)
+                        ! call usage(EXIT_FAILURE)
+                    end iF
+                else 
+                    call usage(EXIT_FAILURE)
+                end if
+        end select
+    end do
 
-    ! call base64_encode(in, 20, out, B64BLOCKSIZE)
-
-    ! print *, out(1:24)
-
-    ! do
-    ! call get_command_argument(argn, optc)
-    ! if (len_trim(optc) == 0) exit
-    ! argn = argn + 1
-
-    ! end do
-
-    ! if (decode) then
-    !     do_decode()
-    ! else
+    if (decode) then
+        call do_decode(infile, "stdout", ignore_garbage)
+    else
         call do_encode(infile, "stdout", wrap_column)
-    ! end if
+    end if
 
     contains
     subroutine base64_encode(inbuf, insize, outbuf, outsize)
@@ -131,8 +151,16 @@ program mybase64
 
     end subroutine do_encode
 
+    subroutine do_decode(inbuf, outbuf, ignore_garbage)
+        character(*), intent(in) :: inbuf
+        character(*), intent(in) :: outbuf
+        logical :: ignore_garbage
+
+        ! TODO Decode
+    end subroutine
+
     subroutine wrap_write(outbuf, outsize, wrap_column, current_column)
-        character (*), intent(in) :: outbuf
+        character (*), intent(inout) :: outbuf
         integer, intent(in) :: outsize, wrap_column
         integer, intent(inout) :: current_column
         integer :: i
@@ -146,6 +174,19 @@ program mybase64
             call fput(outbuf(i:i))
             current_column = current_column + 1
         end do
+    end subroutine
+
+    subroutine usage(status)
+        integer, intent(in) :: status
+
+        if (status /= EXIT_SUCCESS) then
+            print "(A)",  "Try './mybase64 --help' for more information."
+        else 
+            print "(A)", "Usage: ./mybase64 [OPTION]... [FILE]"
+            print "(A)", "Base64 encode or decode FILE, or standard input, to standard output."
+        end if
+
+        call exit(status)
     end subroutine
 
     function base64lenght(x)
