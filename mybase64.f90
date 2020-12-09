@@ -80,9 +80,8 @@ program mybase64
 
         padCount = mod(insize, 3)
         if (padCount > 0) then
-            do i = padCount, 2
-                outbuf(outputIndex:outputIndex) = '='
-                outputIndex = outputIndex+1
+            do i = 3-padCount, 1, -1
+                outbuf(outputIndex-i:outputIndex-i) = '='
             end do
         end if
 
@@ -138,7 +137,7 @@ program mybase64
         integer, intent(inout) :: current_column
         integer :: i
         do i=1, outsize
-            if(current_column > wrap_column) then
+            if(current_column == wrap_column+1) then
                 ! call fput('\n')
                 print '(A)'
                 current_column = 1
