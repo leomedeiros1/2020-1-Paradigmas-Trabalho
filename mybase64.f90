@@ -17,6 +17,8 @@ program mybase64
     integer :: wrap_column = 76
     character(len=1024) :: infile = "test.txt"
 
+    logical :: is_infile_seted = .false.
+
     integer :: argn = 1
     integer :: io_stat
     character(len=32) :: optc = ""
@@ -32,6 +34,14 @@ program mybase64
         argn = argn + 1
 
         select case (optc)
+            case ("--")
+                call getarg(argn, optc)
+                if (argn < iargc()) then
+                    print "(A)", "base64: extra operand ‘" // optc // "’"
+                    call usage(EXIT_FAILURE)
+                end if
+
+                infile = optc
             case ("--help")
                 call usage(EXIT_SUCCESS)
             case ("--version")
@@ -41,18 +51,34 @@ program mybase64
             case ("-d", "--decode")
                 decode = .true.
             case ("-w")
-                !
+                call getarg(argn, optc)
+                argn = argn + 1
+                read (optc, *, IOSTAT=io_stat) wrap_column
+                if (io_stat /= 0) then
+                    print "(A)", "base64: invalid wrap size: ‘" // trim(optc) // "’"
+                    call exit(1)
+                end if
             case default
                 if (optc(1:7) == "--wrap=") then
                     read (optc(8:), *, IOSTAT=io_stat) wrap_column
                     if (io_stat /= 0) then
-                        ! TODO fix optc(8:) lenght
-                        print "(A)", "base64: invalid wrap size: ‘"//optc(8:)//"’"
+                        print "(A)", "base64: invalid wrap size: ‘"//trim(optc(8:))//"’"
                         call exit(1)
-                        ! call usage(EXIT_FAILURE)
-                    end iF
-                else 
+                    end if
+                else if(optc(1:1) == "-") then
+                    if(optc(2:2) == "-") then
+                        print "(A)", "base64: unrecognized option '" // trim(optc(3:)) // "'"
+                    else
+                        print "(A)", "base64: invalid option -- '" // trim(optc(2:)) // "'"
+                    end if
                     call usage(EXIT_FAILURE)
+                else 
+                    if (is_infile_seted) then
+                        print "(A)", "base64: extra operand ‘" // infile // "’"
+                    else
+                        infile = optc
+                        is_infile_seted = .true.
+                    end if
                 end if
         end select
     end do
