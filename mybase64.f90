@@ -1,7 +1,5 @@
 program mybase64
-    ! use, intrinsic :: iso_fortran_env, only : stdin=>input_unit, &
-    !                                       stdout=>output_unit, &
-    !                                       stderr=>error_unit
+    use, intrinsic :: iso_fortran_env, only : stdin=>input_unit
 
     implicit none
 
@@ -15,9 +13,11 @@ program mybase64
     logical :: decode = .false.
     logical :: ignore_garbage = .false.
     integer :: wrap_column = 76
-    character(len=1024) :: infile = "test.txt"
+    character(len=1024) :: infile = ""
 
+    integer :: file_descriptor = 1
     logical :: is_infile_seted = .false.
+    logical :: end_line = .false.
 
     integer :: argn = 1
     integer :: io_stat
@@ -149,13 +149,17 @@ program mybase64
         current_column = 1
         is_eof = .false.
 
-        open(1, file=in, status='old')
+        if (in == "") then
+            file_descriptor = stdin
+        else
+            open(file_descriptor, file=in, status='old')
+        end if
 
         do while (sum == BLOCKSIZE .and. (.not. is_eof))
             ! print *, "Iniciando bloco"
             sum = 0
             do while (sum < BLOCKSIZE)
-                call fgetc(1, tmp, io)
+                call fgetc(file_descriptor, tmp, io)
                 ! print *, tmp, io
                 if (io < 0) then
                     is_eof = .true.
@@ -170,11 +174,15 @@ program mybase64
             ! print *, inbuf(1:sum)
 
             if(sum > 0) then
+                end_line = .true.
                 call base64_encode(inbuf, sum, outbuf, base64lenght(sum))
                 call wrap_write(outbuf, base64lenght(sum), wrap_column, current_column)
             end if
         end do
 
+        if (end_line) then
+            print "(A)"
+        end if
     end subroutine do_encode
 
     subroutine do_decode(inbuf, outbuf, ignore_garbage)
