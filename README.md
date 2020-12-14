@@ -3,4 +3,4 @@
 ## Uso:
 
 * Compile com `$ make `
-* Execute com `./mybase64 `
+* Execute com `$ ./mybase64 `

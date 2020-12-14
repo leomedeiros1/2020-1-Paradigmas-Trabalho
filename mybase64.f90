@@ -8,7 +8,7 @@ program mybase64
 
     integer, parameter :: BLOCKSIZE = 3072
     integer, parameter :: B64BLOCKSIZE  = BLOCKSIZE / 3 * 4 
-    character(*), parameter :: base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    character(*), parameter :: base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
 
     logical :: decode = .false.
     logical :: ignore_garbage = .false.
@@ -90,8 +90,8 @@ program mybase64
     end if
 
     contains
-    subroutine base64_encode(inbuf, insize, outbuf, outsize)
-        integer, intent(in) :: insize, outsize
+    subroutine base64_encode(inbuf, insize, outbuf)
+        integer, intent(in) :: insize
         character (*), intent(inout) :: inbuf, outbuf
 
         integer :: n, n0, n1, n2, n3
@@ -107,19 +107,15 @@ program mybase64
             
             n0 = and(ishft(n, -18) , 63) + 1
             outbuf(outputIndex:outputIndex) = base64chars(n0:n0)
-            ! print *, outbuf(outputIndex:outputIndex)
 
             n1 = and(ishft(n, -12) , 63) + 1
             outbuf(outputIndex+1:outputIndex+1) = base64chars(n1:n1)
-            ! print *, outbuf(outputIndex+1:outputIndex+1)
 
             n2 = and(ishft(n, -6) , 63) + 1
             outbuf(outputIndex+2:outputIndex+2) = base64chars(n2:n2)
-            ! print *, outbuf(outputIndex+2:outputIndex+2)
 
             n3 = and(n , 63) + 1
             outbuf(outputIndex+3:outputIndex+3) = base64chars(n3:n3)
-            ! print *, outbuf(outputIndex+3:outputIndex+3)
 
             outputIndex = outputIndex+4
         end do
@@ -132,6 +128,88 @@ program mybase64
         end if
 
     end subroutine base64_encode
+
+    subroutine base64_decode(inbuf, insize, outbuf, npos, rest, ignore_garbage)
+        integer, intent(in) :: insize
+        character (*), intent(inout) :: inbuf, outbuf
+        integer, intent(inout) :: npos, rest
+        logical, intent(in) :: ignore_garbage
+
+        integer :: n, n0
+        integer :: i, outputIndex
+
+        n = 0
+        outputIndex = 1
+        do i = 1, insize
+            n0 = INDEX(base64chars(:), inbuf(i:i))
+            n0 = n0 - 1
+            if(n0 == -1) then
+                if(ignore_garbage) then
+                    cycle
+                else if(ichar(inbuf(i:i)) == 10) then
+                    cycle
+                else
+                    call invalid_input()
+                end if
+            else if(n0 == 64) then
+                ! estamos no '='
+                select case(npos)
+                    case(-1)
+                        npos = 0
+                        cycle
+                    case(2)
+                        n0 = and(ishft(n, -16), 255)
+                        call fput(achar(n0))
+
+                        npos = -1
+                        n=0
+                        cycle
+                    case(3)
+                        n0 = and(ishft(n, -16), 255)
+                        call fput(achar(n0))
+
+                        n0 = and(ishft(n, -8), 255)
+                        call fput(achar(n0))
+                        npos = 0
+                        n=0
+                        cycle
+                    case default
+                        call invalid_input()
+                end select
+            else
+                ! caso normal
+                select case(npos)
+                    case(-1)
+                        call invalid_input()
+                    case(0)
+                        n0 = ishft(n0, 18) 
+                    case(1)
+                        n0 = ishft(n0, 12) 
+                    case(2)
+                        n0 = ishft(n0, 6) 
+                    ! case(3)
+                    !     n0 = ishft(n0, 0)
+                end select
+                n = n + n0
+                npos = npos + 1
+            end if
+
+            if(npos == 4) then
+                n0 = and(ishft(n, -16), 255)
+                call fput(achar(n0))
+
+                n0 = and(ishft(n, -8), 255)
+                call fput(achar(n0))
+
+                n0 = and(n, 255)
+                call fput(achar(n0))
+
+                npos = 0
+                n = 0
+            end if
+        end do
+        rest = n
+    end subroutine base64_decode
 
     subroutine do_encode(in, out, wrap_column)
         character(*), intent(in) :: in, out
@@ -160,7 +238,6 @@ program mybase64
             sum = 0
             do while (sum < BLOCKSIZE)
                 call fgetc(file_descriptor, tmp, io)
-                ! print *, tmp, io
                 if (io < 0) then
                     is_eof = .true.
                     exit
@@ -171,11 +248,10 @@ program mybase64
                 sum = sum+1
             end do
 
-            ! print *, inbuf(1:sum)
 
             if(sum > 0) then
                 end_line = .true.
-                call base64_encode(inbuf, sum, outbuf, base64lenght(sum))
+                call base64_encode(inbuf, sum, outbuf)
                 call wrap_write(outbuf, base64lenght(sum), wrap_column, current_column)
             end if
         end do
@@ -185,12 +261,59 @@ program mybase64
         end if
     end subroutine do_encode
 
-    subroutine do_decode(inbuf, outbuf, ignore_garbage)
-        character(*), intent(in) :: inbuf
-        character(*), intent(in) :: outbuf
+    subroutine do_decode(in, out, ignore_garbage)
+        character(*), intent(in) :: in
+        character(*), intent(in) :: out
         logical :: ignore_garbage
 
-        ! TODO Decode
+        character(len=B64BLOCKSIZE) :: inbuf
+        character(len=BLOCKSIZE) :: outbuf
+        integer :: sum, io
+        logical :: is_eof
+        integer :: npos=0
+
+        character :: tmp
+
+        integer :: rest
+        rest=0
+
+        sum=B64BLOCKSIZE
+        is_eof = .false.
+
+        if (in == "") then
+            file_descriptor = stdin
+        else
+            open(file_descriptor, file=in, status='old')
+        end if
+
+        do while (sum == B64BLOCKSIZE .and. (.not. is_eof))
+            sum = 0
+            do while (sum < B64BLOCKSIZE)
+                call fgetc(file_descriptor, tmp, io)
+                if (io < 0) then
+                    is_eof = .true.
+                    exit
+                else if (io > 0) then
+                    ! error de leitura (parece que o base64 nao se encomoda)
+                end if
+                inbuf(sum+1:sum+1) = tmp
+                sum = sum+1
+            end do
+
+            if(sum > 0) then
+                call base64_decode(inbuf, sum, outbuf, npos, rest, ignore_garbage)
+            end if
+        end do
+
+        if(npos /= 0) then
+            if(npos >= 2) then
+                call fput(achar(and(ishft(rest, -16), 255)))
+            end if
+            if(npos >= 3) then
+                call fput(achar(and(ishft(rest, -8), 255)))
+            end if
+            call invalid_input()
+        end if
     end subroutine
 
     subroutine wrap_write(outbuf, outsize, wrap_column, current_column)
@@ -200,11 +323,9 @@ program mybase64
         integer :: i
         do i=1, outsize
             if(current_column == wrap_column+1) then
-                ! call fput('\n')
                 print '(A)'
                 current_column = 1
             end if
-            ! write(*,*) outbuf(i:i)
             call fput(outbuf(i:i))
             current_column = current_column + 1
         end do
@@ -222,6 +343,11 @@ program mybase64
 
         call exit(status)
     end subroutine
+
+    subroutine invalid_input()
+        print "(A)", "base64: invalid input"
+        call exit(1)
+    end subroutine invalid_input
 
     function base64lenght(x)
         integer :: x, base64lenght
