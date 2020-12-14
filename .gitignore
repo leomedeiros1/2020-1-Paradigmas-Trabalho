@@ -1,4 +1,5 @@
 *.o
 mybase64
 
-*.txt
+base64.out
+mybase64.out

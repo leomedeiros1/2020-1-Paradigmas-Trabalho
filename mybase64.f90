@@ -37,11 +37,16 @@ program mybase64
             case ("--")
                 call getarg(argn, optc)
                 if (argn < iargc()) then
-                    print "(A)", "base64: extra operand ‘" // optc // "’"
+                    print "(A)", "base64: extra operand ‘" // trim(optc) // "’"
+                    call usage(EXIT_FAILURE)
+                else if(optc /= "" .and. infile /= "") then
+                    print "(A)", "base64: extra operand ‘" // trim(infile) // "’"
                     call usage(EXIT_FAILURE)
                 end if
 
-                infile = optc
+                if(optc /= "") then
+                    infile = optc
+                end if
             case ("--help")
                 call usage(EXIT_SUCCESS)
             case ("--version")
@@ -50,7 +55,7 @@ program mybase64
                 ignore_garbage = .true.
             case ("-d", "--decode")
                 decode = .true.
-            case ("-w")
+            case ("-w", "--w")
                 call getarg(argn, optc)
                 argn = argn + 1
                 read (optc, *, IOSTAT=io_stat) wrap_column
@@ -58,11 +63,20 @@ program mybase64
                     print "(A)", "base64: invalid wrap size: ‘" // trim(optc) // "’"
                     call exit(1)
                 end if
+            case ("--wrap")
+                print "(A)", "base64: option '--wrap' requires an argument"
+                call usage(EXIT_FAILURE)
             case default
                 if (optc(1:7) == "--wrap=") then
                     read (optc(8:), *, IOSTAT=io_stat) wrap_column
                     if (io_stat /= 0) then
                         print "(A)", "base64: invalid wrap size: ‘"//trim(optc(8:))//"’"
+                        call exit(1)
+                    end if
+                else if (optc(1:2) == "-w") then
+                    read (optc(3:), *, IOSTAT=io_stat) wrap_column
+                    if (io_stat /= 0) then
+                        print "(A)", "base64: invalid wrap size: ‘"//trim(optc(3:))//"’"
                         call exit(1)
                     end if
                 else if(optc(1:1) == "-") then
@@ -74,7 +88,7 @@ program mybase64
                     call usage(EXIT_FAILURE)
                 else 
                     if (is_infile_seted) then
-                        print "(A)", "base64: extra operand ‘" // infile // "’"
+                        print "(A)", "base64: extra operand ‘" // trim(infile) // "’"
                     else
                         infile = optc
                         is_infile_seted = .true.
@@ -100,7 +114,7 @@ program mybase64
         integer :: i, outputIndex
 
         outputIndex=1
-        do i = 1, insize, 3
+        do i = 1, (insize/3) * 3, 3
             n = ishft( ichar( inbuf(i:i)), 16 ) 
             n = n + ishft( ichar( inbuf(i+1:i+1)), 8 ) 
             n = n + ichar( inbuf(i+2:i+2))
@@ -120,12 +134,30 @@ program mybase64
             outputIndex = outputIndex+4
         end do
 
-        padCount = mod(insize, 3)
-        if (padCount > 0) then
-            do i = 3-padCount, 1, -1
-                outbuf(outputIndex-i:outputIndex-i) = '='
-            end do
-        end if
+        select case(mod(insize, 3))
+            case(1)
+                n = ishft( ichar( inbuf(i:i)), 16)
+                n0 = and(ishft(n, -18) , 63) + 1
+                outbuf(outputIndex:outputIndex) = base64chars(n0:n0)
+
+                n1 = and(ishft(n, -12) , 63) + 1
+                outbuf(outputIndex+1:outputIndex+1) = base64chars(n1:n1)
+                outbuf(outputIndex+2:outputIndex+2) = '='
+                outbuf(outputIndex+3:outputIndex+3) = '='
+            case(2)
+                n = ishft( ichar( inbuf(i:i)), 16 ) 
+                n = n + ishft( ichar( inbuf(i+1:i+1)), 8 )
+
+                n0 = and(ishft(n, -18) , 63) + 1
+                outbuf(outputIndex:outputIndex) = base64chars(n0:n0)
+
+                n1 = and(ishft(n, -12) , 63) + 1
+                outbuf(outputIndex+1:outputIndex+1) = base64chars(n1:n1)
+
+                n2 = and(ishft(n, -6) , 63) + 1
+                outbuf(outputIndex+2:outputIndex+2) = base64chars(n2:n2)
+                outbuf(outputIndex+3:outputIndex+3) = '='
+        end select
 
     end subroutine base64_encode
 
@@ -218,7 +250,7 @@ program mybase64
         integer :: current_column
         character(len=BLOCKSIZE) :: inbuf
         character(len=B64BLOCKSIZE) :: outbuf
-        integer :: sum, io
+        integer :: sum, io, status
         logical :: is_eof
 
         character :: tmp
@@ -230,7 +262,10 @@ program mybase64
         if (in == "") then
             file_descriptor = stdin
         else
-            open(file_descriptor, file=in, status='old')
+            open(file_descriptor, file=in, status='old', iostat=status)
+            if(status /= 0) then
+                print "(A)", "base64: "// trim(in) // ": No such file or directory"
+            end if
         end if
 
         do while (sum == BLOCKSIZE .and. (.not. is_eof))
@@ -274,7 +309,7 @@ program mybase64
 
         character :: tmp
 
-        integer :: rest
+        integer :: rest, status
         rest=0
 
         sum=B64BLOCKSIZE
@@ -283,7 +318,10 @@ program mybase64
         if (in == "") then
             file_descriptor = stdin
         else
-            open(file_descriptor, file=in, status='old')
+            open(file_descriptor, file=in, status='old', iostat=status)
+            if(status /= 0) then
+                print "(A)", "base64: "// trim(in) // ": No such file or directory"
+            end if
         end if
 
         do while (sum == B64BLOCKSIZE .and. (.not. is_eof))
@@ -384,5 +422,6 @@ program mybase64
         integer :: x, base64lenght
         base64lenght = CEILING(x / 3.0) * 4
     end function
+
         
 end program mybase64
