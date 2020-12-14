@@ -45,7 +45,7 @@ program mybase64
             case ("--help")
                 call usage(EXIT_SUCCESS)
             case ("--version")
-                print "(a4)", "8.30"
+                call version()
             case ("-i", "--ignore-garbage")
                 ignore_garbage = .true.
             case ("-d", "--decode")
@@ -335,10 +335,30 @@ program mybase64
         integer, intent(in) :: status
 
         if (status /= EXIT_SUCCESS) then
-            print "(A)",  "Try './mybase64 --help' for more information."
+            print "(A)",  "Try 'base64 --help' for more information."
         else 
-            print "(A)", "Usage: ./mybase64 [OPTION]... [FILE]"
+            print "(A)", "Usage: base64 [OPTION]... [FILE]"
             print "(A)", "Base64 encode or decode FILE, or standard input, to standard output."
+            print "(A)"
+            print "(A)", "With no FILE, or when FILE is -, read standard input."
+            print "(A)"
+            print "(A)", "Mandatory arguments to long options are mandatory for short options too."
+            print "(A)", "  -d, --decode          decode data"
+            print "(A)", "  -i, --ignore-garbage  when decoding, ignore non-alphabet characters"
+            print "(A)", "  -w, --wrap=COLS       wrap encoded lines after COLS character (default 76)."
+            print "(A)", "                          Use 0 to disable line wrapping"
+            print "(A)"
+            print "(A)", "      --help     display this help and exit"
+            print "(A)", "      --version  output version information and exit"
+            print "(A)"
+            print "(A)", "The data are encoded as described for the base64 alphabet in RFC 4648."
+            print "(A)", "When decoding, the input may contain newlines in addition to the bytes of"
+            print "(A)", "the formal base64 alphabet.  Use --ignore-garbage to attempt to recover"
+            print "(A)", "from any other non-alphabet bytes in the encoded stream."
+            print "(A)"
+            print "(A)", "GNU coreutils online help: <https://www.gnu.org/software/coreutils/>"
+            print "(A)", "Full documentation at: <https://www.gnu.org/software/coreutils/base64>"
+            print "(A)", "or available locally via: info '(coreutils) base64 invocation'"
         end if
 
         call exit(status)
@@ -348,6 +368,17 @@ program mybase64
         print "(A)", "base64: invalid input"
         call exit(1)
     end subroutine invalid_input
+
+    subroutine version()
+        print "(A)", "base64 (GNU coreutils) 8.30"
+        print "(A)", "Copyright (C) 2018 Free Software Foundation, Inc."
+        print "(A)", "License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>."
+        print "(A)", "This is free software: you are free to change and redistribute it."
+        print "(A)", "There is NO WARRANTY, to the extent permitted by law."
+        print "(A)"
+        print "(A)", "Written by Simon Josefsson."
+        call exit(0)
+    end subroutine version
 
     function base64lenght(x)
         integer :: x, base64lenght
